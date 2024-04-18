@@ -1,9 +1,18 @@
 import re
 from urllib.parse import urlparse, urljoin, urldefrag
 from bs4 import BeautifulSoup
+from configparser import ConfigParser
+from utils.config import Config
 
 unique_links = set()
-# ignore_tags = ['header', 'footer', 'aside']
+ignore_tags = ['header', 'footer', 'aside']
+
+cparser = ConfigParser()
+cparser.read('config.ini')
+config = Config(cparser)
+seedurls = []
+for url in config.seed_urls:
+    seedurls.append(urlparse(url).netloc)
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -26,7 +35,11 @@ def extract_next_links(url, resp):
     links = set()
     soup = BeautifulSoup(resp.raw_response.content, 'lxml')     # create beautifulsoup object using 'lxml' (faster)
 
-    body = soup.find('body')
+    # remove certain tags
+    for tag in ignore_tags:
+        for element in soup.find_all(tag):
+            element.decompose()
+
     for link in soup.find_all('a', href=True):                 # find all href (links) from <a> tag and loop through them
         full_url = urljoin(url, link['href'])                   # get the full urls
         full_url, _ = urldefrag(full_url)                       # remove fragmentation
@@ -45,6 +58,11 @@ def is_valid(url):
         parsed = urlparse(url)
         if parsed.scheme not in set(["http", "https"]):
             return False
+        
+        # if parsed not in seedurls: return False
+        if parsed.netloc not in seedurls:
+            return False
+
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|tiff?|mid|mp2|mp3|mp4"
