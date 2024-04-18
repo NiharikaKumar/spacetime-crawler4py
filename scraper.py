@@ -1,5 +1,9 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin, urldefrag
+from bs4 import BeautifulSoup
+
+unique_links = set()
+# ignore_tags = ['header', 'footer', 'aside']
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
@@ -15,7 +19,23 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+
+    # Check if status is invalid
+    if resp.status != 200: return set()
+
+    links = set()
+    soup = BeautifulSoup(resp.raw_response.content, 'lxml')     # create beautifulsoup object using 'lxml' (faster)
+
+    body = soup.find('body')
+    for link in soup2.find_all('a', href=True):                 # find all href (links) from <a> tag and loop through them
+        full_url = urljoin(url, link['href'])                   # get the full urls
+        full_url, _ = urldefrag(full_url)                       # remove fragmentation
+        if link not in unique_links:
+            unique_links.add(full_url)
+            links.add(full_url)                                 # add to the retuning set
+    
+
+    return list(links)
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
