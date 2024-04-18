@@ -27,7 +27,7 @@ def extract_next_links(url, resp):
     soup = BeautifulSoup(resp.raw_response.content, 'lxml')     # create beautifulsoup object using 'lxml' (faster)
 
     body = soup.find('body')
-    for link in soup2.find_all('a', href=True):                 # find all href (links) from <a> tag and loop through them
+    for link in soup.find_all('a', href=True):                 # find all href (links) from <a> tag and loop through them
         full_url = urljoin(url, link['href'])                   # get the full urls
         full_url, _ = urldefrag(full_url)                       # remove fragmentation
         if link not in unique_links:
