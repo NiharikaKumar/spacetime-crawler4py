@@ -4,7 +4,8 @@ from bs4 import BeautifulSoup
 from configparser import ConfigParser
 from utils.config import Config
 
-unique_links = set()
+unique_links = dict()
+
 ignore_tags = ['header', 'footer', 'aside']
 
 cparser = ConfigParser()
@@ -12,6 +13,7 @@ cparser.read('config.ini')
 config = Config(cparser)
 seedurls = []
 for url in config.seed_urls:
+    unique_links[url] = 0
     seedurls.append(urlparse(url).netloc)
 
 def scraper(url, resp):
@@ -30,6 +32,7 @@ def extract_next_links(url, resp):
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
     # Check if status is invalid
+
     if resp.status != 200: return set()
 
     links = set()
@@ -43,9 +46,22 @@ def extract_next_links(url, resp):
     for link in soup.find_all('a', href=True):                 # find all href (links) from <a> tag and loop through them
         full_url = urljoin(url, link['href'])                   # get the full urls
         full_url, _ = urldefrag(full_url)                       # remove fragmentation
-        if link not in unique_links:
-            unique_links.add(full_url)
-            links.add(full_url)                                 # add to the retuning set
+        if full_url[-1] == '/':
+            full_url = full_url[:-1]
+        if link not in unique_links and full_url != url:
+            depth_count = unique_links[url] + 1
+            
+
+            # unique_links[full_url] = depth_count
+
+            if depth_count <= 5:
+                unique_links[full_url] = depth_count
+                links.add(full_url)  
+            
+            print(url)
+            print(full_url)
+            print(unique_links)
+            # unique_links.add(full_url)
     
 
     return list(links)
