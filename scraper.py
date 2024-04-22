@@ -36,7 +36,7 @@ def extract_next_links(url, resp):
 
     # Check if the current depth is not too deep (Avoid traps)
     current_depth = unique_links[url]
-    if(current_depth >= 200):
+    if(current_depth >= 50):
         return set()
 
     links = set()
