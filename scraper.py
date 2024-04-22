@@ -4,14 +4,14 @@ from bs4 import BeautifulSoup
 from configparser import ConfigParser
 from utils.config import Config
 
-unique_links = dict()
-
 ignore_tags = ['header', 'footer', 'aside']
 
+seedurls = []
+unique_links = dict()
+# Get seedurl and add them to unique_links
 cparser = ConfigParser()
 cparser.read('config.ini')
 config = Config(cparser)
-seedurls = []
 for url in config.seed_urls:
     unique_links[url] = 0
     seedurls.append(urlparse(url).netloc)
@@ -32,37 +32,38 @@ def extract_next_links(url, resp):
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
     # Check if status is invalid
-
     if resp.status != 200: return set()
+
+    # Check if the current depth is not too deep (Avoid traps)
+    current_depth = unique_links[url]
+    if(current_depth >= 200):
+        return set()
 
     links = set()
     soup = BeautifulSoup(resp.raw_response.content, 'lxml')     # create beautifulsoup object using 'lxml' (faster)
 
-    # remove certain tags
-    for tag in ignore_tags:
-        for element in soup.find_all(tag):
-            element.decompose()
+    # remove certain tags (Avoid data noise)
+    # for tag in ignore_tags:
+    #     for element in soup.find_all(tag):
+    #         element.decompose()
+    for script_or_style in soup(ignore_tags):
+        script_or_style.decompose()
 
-    for link in soup.find_all('a', href=True):                 # find all href (links) from <a> tag and loop through them
-        full_url = urljoin(url, link['href'])                   # get the full urls
-        full_url, _ = urldefrag(full_url)                       # remove fragmentation
-        if full_url[-1] == '/':
-            full_url = full_url[:-1]
-        if link not in unique_links and full_url != url:
-            depth_count = unique_links[url] + 1
+    # Detect and avoid sets of pages with no information
+    if has_low_information(soup):
+        return set()
+
+    for link in soup.find_all('a', href=True):                  # find all href (links) from <a> tag and loop through them
+        full_url = get_full_url(url, link)                      # get full url
+
+        if link not in unique_links and full_url != url:        # if the link has not been scraped before, add to unique_links and add to return set (Avoid duplicates)
+            unique_links[full_url] = current_depth + 1
+            links.add(full_url)  
             
-
-            # unique_links[full_url] = depth_count
-
-            if depth_count <= 5:
-                unique_links[full_url] = depth_count
-                links.add(full_url)  
-            
-            print(url)
-            print(full_url)
-            print(unique_links)
+            # print(url)
+            # print(full_url)
+            # print(unique_links)
             # unique_links.add(full_url)
-    
 
     return list(links)
 
@@ -75,7 +76,7 @@ def is_valid(url):
         if parsed.scheme not in set(["http", "https"]):
             return False
         
-        # if parsed not in seedurls: return False
+        # if parsed not in seedurls: return False (Avoid other urls)
         if parsed.netloc not in seedurls:
             return False
 
@@ -92,3 +93,21 @@ def is_valid(url):
     except TypeError:
         print ("TypeError for ", parsed)
         raise
+
+# Given the parent url, and the link's url: return the full url
+def get_full_url(url, link):
+    full_url = urljoin(url, link['href'])                   # get the full urls
+    full_url, _ = urldefrag(full_url)                       # remove fragmentation
+    # Remove '/' at the end of url
+    if full_url[-1] == '/':
+        full_url = full_url[:-1]
+    return full_url
+
+# Checks if the content has enough information
+def has_low_information(soup):
+    text = soup.get_text(separator=' ')
+    words = re.findall(r'\w+', text)
+
+    min_length = 200  # minimum number of characters for meaningful content
+
+    return len(text) < min_length
