@@ -56,7 +56,7 @@ def extract_next_links(url, resp):
     for link in soup.find_all('a', href=True):                  # find all href (links) from <a> tag and loop through them
         full_url = get_full_url(url, link)                      # get full url
 
-        if link not in unique_links and full_url != url:        # if the link has not been scraped before, add to unique_links and add to return set (Avoid duplicates)
+        if full_url not in unique_links and full_url != url:        # if the link has not been scraped before, add to unique_links and add to return set (Avoid duplicates)
             unique_links[full_url] = current_depth + 1
             links.add(full_url)  
             
