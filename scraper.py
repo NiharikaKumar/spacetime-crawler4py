@@ -4,23 +4,65 @@ from bs4 import BeautifulSoup
 from configparser import ConfigParser
 from utils.config import Config
 import urllib.robotparser
+import csv
+
+
+stopwords = (
+    'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and',
+    'any', 'are', "aren't", 'as', 'at', 'be', 'because', 'been', 'before', 'being',
+    'below', 'between', 'both', 'but', 'by', "can't", 'cannot', 'could', "couldn't",
+    'did', "didn't", 'do', 'does', "doesn't", 'doing', "don't", 'down', 'during',
+    'each', 'few', 'for', 'from', 'further', 'had', "hadn't", 'has', "hasn't", 'have',
+    "haven't", 'having', 'he', "he'd", "he'll", "he's", 'her', 'here', "here's", 'hers',
+    'herself', 'him', 'himself', 'his', 'how', "how's", 'i', "i'd", "i'll", "i'm", "i've",
+    'if', 'in', 'into', 'is', "isn't", 'it', "it's", 'its', 'itself', "let's", 'me', 'more',
+    'most', "mustn't", 'my', 'myself', 'no', 'nor', 'not', 'of', 'off', 'on', 'once', 'only',
+    'or', 'other', 'ought', 'our', 'ours', 'ourselves', 'out', 'over', 'own', 'same', "shan't",
+    'she', "she'd", "she'll", "she's", 'should', "shouldn't", 'so', 'some', 'such', 'than', 'that',
+    "that's", 'the', 'their', 'theirs', 'them', 'themselves', 'then', 'there', "there's", 'these',
+    'they', "they'd", "they'll", "they're", "they've", 'this', 'those', 'through', 'to', 'too',
+    'under', 'until', 'up', 'very', 'was', "wasn't", 'we', "we'd", "we'll", "we're", "we've",
+    'were', "weren't", 'what', "what's", 'when', "when's", 'where', "where's", 'which', 'while',
+    'who', "who's", 'whom', 'why', "why's", 'with', "won't", 'would', "wouldn't", 'you', "you'd",
+    "you'll", "you're", "you've", 'your', 'yours', 'yourself', 'yourselves'
+)
+
+
+# longest page stores the url of the page with the most number of words
+# longest page count stores the word count associated with the longest page
+longest_page = ""
+longest_page_count = 0
+
+# a dictionary to store all tokens found
+# to be used to see which 50 are the most common
+# does NOT include stopwords
+all_tokens = {}
 
 ignore_tags = ['header', 'footer', 'aside']
 count = 0
 
+
 seedurls = []
 unique_links = dict()
+
+
 # Get seedurl and add them to unique_links
 cparser = ConfigParser()
 cparser.read('config.ini')
 config = Config(cparser)
+
+
 for url in config.seed_urls:
     unique_links[url] = 0
     seedurls.append(urlparse(url).netloc)
 
+
+
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
+
+
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -49,7 +91,16 @@ def extract_next_links(url, resp):
 
     links = set()
     parsed = urlparse(url)
-    soup = BeautifulSoup(resp.raw_response.content, 'lxml')     # create beautifulsoup object using 'lxml' (faster)
+    
+    # create beautifulsoup object using 'lxml' (faster)
+    soup = BeautifulSoup(resp.raw_response.content, 'lxml')
+    
+    # tokenize the url page
+    tokens = tokenize(soup.get_text())
+
+    with open('results.txt', 'w+') as results:
+        for token in all_tokens:
+            results.write(f"{token}: {all_tokens[token]}\n")
 
     if is_error_page(soup):
         return set()
@@ -152,3 +203,48 @@ def is_error_page(soup):
         return True
 
     return False
+
+
+def tokenize(content_string):
+    words = []
+    word = ""
+
+    for char in content_string:
+        if is_alphanum(char):
+            word += char
+        else:
+            if len(word) > 0:
+                word = word.lower()
+                words.append(word)
+    
+                add_to_all_tokens(word)
+
+                word = ""
+    
+    return words
+
+
+def add_to_all_tokens(word):
+    if word not in stopwords:
+        if word not in all_tokens:
+            all_tokens[word] = 1
+        else:
+            all_tokens[word] += 1
+
+
+def is_alphanum(character: str) -> bool:
+    """returns true/false depending on whether a character is an alphanumeric 
+        character, i.e. is between A-Z or a-z or 0-9"""
+    
+    # a-z is 97-122 included
+    # A-Z is 65-90 included
+    # 0-9 is 48-57 included
+
+    if 48 <= ord(character) <= 57:
+        return True
+    elif 65 <= ord(character) <= 90:
+        return True
+    elif 97 <= ord(character) <= 122:
+        return True
+    else:
+        return False
