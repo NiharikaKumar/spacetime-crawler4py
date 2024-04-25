@@ -2,3 +2,4 @@ cbor
 requests
 lxml
 beautifulsoup4
+simhash

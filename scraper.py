@@ -4,12 +4,24 @@ from bs4 import BeautifulSoup
 from configparser import ConfigParser
 from utils.config import Config
 import urllib.robotparser
+from simhash import Simhash, SimhashIndex
+from hashlib import sha256
+from stopwords import stopwords
+from collections import Counter
 
+word_counts = Counter()
 ignore_tags = ['header', 'footer', 'aside']
+
+max_words = 0
 count = 0
 
+subdomain_counts = dict()
 seedurls = []
 unique_links = dict()
+# seen_hashes = set()
+content_hashes = set()
+simhash_index = SimhashIndex([], k=3)
+
 # Get seedurl and add them to unique_links
 cparser = ConfigParser()
 cparser.read('config.ini')
@@ -33,54 +45,130 @@ def extract_next_links(url, resp):
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
 
-    global count
+    global count, max_words
 
-    # Check if status is invalid
-    if resp.status < 200 or resp.status >= 300:
-         return set()
+    # Avoid invalid data passed
+    if resp is None or resp.raw_response is None or resp.raw_response.content is None:
+        return set()
+
+    # Avoid invalid status
+    if not 200 <= resp.status < 400:
+        return set()
+
+    # Check for redirect
+    if resp.status in (301, 302, 303, 307, 308):
+        location = resp.headers.get('Location')
+        if location:
+            url = urljoin(url, location)
+        else:
+            return set()
+
+    # Check content size
+    content_length = resp.raw_response.headers.get('Content-Length')
+    if content_length != None and int(content_length) > 100000000: # 100MB
+        return set()
+
+    # Check for duplicates:
+    # get encoding
+    content_type = resp.raw_response.headers.get('Content-Type', '')
+    encoding = 'utf-8'  # Default to UTF-8
+    if 'charset=' in content_type:
+        encoding = content_type.split('charset=')[-1].split(';')[0].strip()
+    else:
+        encoding = 'iso-8859-1'  # Common default if charset is not specified
+    # decode given encoding
+    try:
+        content = resp.raw_response.content.decode(encoding)
+    except UnicodeDecodeError:
+        content = resp.raw_response.content.decode('latin-1')
+    except LookupError:
+        content = resp.raw_response.content.decode('iso-8859-1')
+    # check for duplicates
+    if is_duplicate(content):
+        return set()
 
     # Check if the current depth is not too deep (Avoid traps)
     current_depth = unique_links[url]
     if(current_depth >= 200):
         return set()
-    
-    if resp is None or resp.raw_response is None or resp.raw_response.content is None:
-        return set()
 
-    links = set()
-    parsed = urlparse(url)
-    soup = BeautifulSoup(resp.raw_response.content, 'lxml')     # create beautifulsoup object using 'lxml' (faster)
+    soup = BeautifulSoup(content, 'lxml')
 
-    if is_error_page(soup):
-        return set()
+    # Remove certain tags (Avoid data noise)
+    # for tag in ignore_tags:
+    #     for element in soup.find_all(tag):
+    #         element.decompose()
 
-    rp = urllib.robotparser.RobotFileParser()
-    rp.set_url('https://' + parsed.netloc + '/robots.txt')
-    rp.read()
-
-    # remove certain tags (Avoid data noise)
-    for tag in ignore_tags:
-        for element in soup.find_all(tag):
-            element.decompose()
-    # for script_or_style in soup(ignore_tags):
-    #     script_or_style.decompose()
-
-    # Detect and avoid sets of pages with no information
+    # Check if the website has little information
     if has_low_information(soup):
         return set()
-    
+
+    # [] WRITE url with max words
+    # content_type = resp.headers.get('Content-Type', '')
+    text = soup.get_text(separator=' ')
+    words = [word.lower() for word in re.findall(r'\w+', text)]
+    if len(words) > max_words and not url.endswith('.html') and len(words) < 10000:
+        max_words = len(words)
+        with open("x_max_words.txt", 'w') as file:
+            file.write(f"{url} {max_words}")
+        # print("\t max words:", url)
+
+    # [] WRITE most common words
+    words_set = set(words) - set(stopwords)
+    filtered_words = [word for word in words_set if len(word) > 1]
+    word_counts.update(filtered_words)
+    top_words = word_counts.most_common(50)
+    with open("x_most_frequent.txt", 'w') as file:
+        for word, frequency in top_words:
+            file.write(f"{word}: {frequency}\n")
+
     count += 1
-    print("\t number:", count)
+    # [] WRITE number of unique urls
+    # print("\t number:", count)
+    with open("x_count.txt", 'w') as file:
+        file.write(f"{count}")
 
+    # [] WRITE subdomains of ics.uci.edu
+    parsed_url = urlparse(url)
+    subdomain = parsed_url.netloc
+    if subdomain.endswith(".ics.uci.edu"):
+        if subdomain in subdomain_counts:
+            subdomain_counts[url] += 1
+        else:
+            subdomain_counts[url] = 1
+    with open("x_subdomains.txt", 'w') as file:
+        for subdomain in sorted(subdomain_counts.keys()):
+            file.write(f"{subdomain}, {subdomain_counts[subdomain]}\n")
 
-    for link in soup.find_all('a', href=True):                  # find all href (links) from <a> tag and loop through them
-        full_url = get_full_url(url, link)                      # get full url
+    links = set()
 
-        if full_url not in unique_links and full_url != url and rp.can_fetch('*', full_url):        # if the link has not been scraped before, add to unique_links and add to return set (Avoid duplicates)
-            unique_links[full_url] = current_depth + 1
-            links.add(full_url)
+    # Read robots.txt
+    rp = urllib.robotparser.RobotFileParser()
+    rp.set_url(urljoin(url, '/robots.txt'))
+    rp.read()
+
+    # Check every link in the website
+    for link in soup.find_all('a'):
+        href = link.get('href')
+        if href:
+            full_url = get_full_url(url, href)
+            if full_url not in unique_links and rp.can_fetch('*', full_url):    # If the link has not been scanned, and we are allowed to scan
+                unique_links[full_url] = current_depth + 1
+                links.add(full_url)
 
     return list(links)
+
+# Given the parent url, and the link's url: return the full url
+def get_full_url(url, href):
+    full_url = urljoin(url, href)       # join url if necessary
+    full_url, _ = urldefrag(full_url)   # remove fragment
+    # remove query
+    parsed_url = urlparse(full_url)
+    clean_url = urlunparse(parsed_url._replace(query=""))
+    # remove '/' at the end
+    if clean_url[-1] == '/':
+        clean_url = clean_url[:-1]
+    return clean_url
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
@@ -103,52 +191,38 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|img|jpg|war|mpg|php|apk"
+            + r"|img|jpg|war|mpg|apk|z"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", parsed.path.lower())
 
     except TypeError:
         print ("TypeError for ", parsed)
         raise
 
-# Given the parent url, and the link's url: return the full url
-def get_full_url(url, link):
-    full_url = urljoin(url, link['href'])                   # get the full urls
-    full_url, _ = urldefrag(full_url)                       # remove fragmentation
-    # Remove '/' at the end of url
-    # if full_url[-1] == '/':
-    #     full_url = full_url[:-1]
-    # return full_url
-    parsed_url = urlparse(full_url)
-    clean_url = urlunparse(parsed_url._replace(query=""))
-    if clean_url[-1] == '/':
-        clean_url = clean_url[:-1]
-    return clean_url
-
 # Checks if the content has enough information
 def has_low_information(soup):
     text = soup.get_text(separator=' ')
-    words = re.findall(r'\w+', text)
-
-    min_length = 200  # minimum number of characters for meaningful content
+    min_length = 200  # minimum number of characters
 
     return len(text) < min_length
 
+def get_content_hash(content):
+    return sha256(content.encode('utf-8')).hexdigest()
+
+def get_simhash(content):
+    return Simhash(content)
+
+def is_duplicate(content):
+    # Check exact duplicate
+    content_hash = get_content_hash(content)
+    if content_hash in content_hashes:
+        return True
+    content_hashes.add(content_hash)
     
-def is_error_page(soup):
-    error_indicators = ["404", "error", "not found", "not available", "page not found", "not exist", "whoops!"]
-    text = soup.get_text(separator=' ').lower()
-
-    # Check for common error phrases in the page text
-    if any(phrase in text for phrase in error_indicators):
+    # Check near duplicate
+    simhash = get_simhash(content)
+    near_dup = simhash_index.get_near_dups(simhash)
+    if near_dup:
         return True
-
-    # Check title for error indicators, ensuring title is not None
-    title_text = (soup.title.string.lower() if soup.title and soup.title.string else "")
-    if any(phrase in title_text for phrase in error_indicators):
-        return True
-
-    # Check if the HTML content is suspiciously short or lacks structural depth
-    if len(text) < 200 or len(soup.find_all(['p', 'div', 'header', 'footer', 'article'])) < 3:
-        return True
+    simhash_index.add(str(simhash), simhash)
 
     return False
