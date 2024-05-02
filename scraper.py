@@ -9,6 +9,9 @@ from hashlib import sha256
 from stopwords import stopwords
 from collections import Counter
 
+
+# with depth, with tags, without words
+
 word_counts = Counter()
 ignore_tags = ['header', 'footer', 'aside']
 
@@ -88,16 +91,16 @@ def extract_next_links(url, resp):
         return set()
 
     # Check if the current depth is not too deep (Avoid traps)
-    current_depth = unique_links[url]
-    if(current_depth >= 200):
-        return set()
+    #current_depth = unique_links[url]
+    #if(current_depth >= 200):
+    #    return set()
 
     soup = BeautifulSoup(content, 'lxml')
 
     # Remove certain tags (Avoid data noise)
-    # for tag in ignore_tags:
-    #     for element in soup.find_all(tag):
-    #         element.decompose()
+    for tag in ignore_tags:
+        for element in soup.find_all(tag):
+            element.decompose()
 
     # Check if the website has little information
     if has_low_information(soup):
@@ -107,11 +110,11 @@ def extract_next_links(url, resp):
     # content_type = resp.headers.get('Content-Type', '')
     text = soup.get_text(separator=' ')
     words = [word.lower() for word in re.findall(r'\w+', text)]
-    if len(words) > max_words and not url.endswith('.html') and len(words) < 10000:
+    if len(words) > max_words:
         max_words = len(words)
         with open("x_max_words.txt", 'w') as file:
             file.write(f"{url} {max_words}")
-        # print("\t max words:", url)
+        print("\t max words:", max_words ,url)
 
     # [] WRITE most common words
     words_set = set(words) - set(stopwords)
@@ -127,6 +130,7 @@ def extract_next_links(url, resp):
     # print("\t number:", count)
     with open("x_count.txt", 'w') as file:
         file.write(f"{count}")
+        print("\tcount", count)
 
     # [] WRITE subdomains of ics.uci.edu
     parsed_url = urlparse(url)
@@ -143,17 +147,17 @@ def extract_next_links(url, resp):
     links = set()
 
     # Read robots.txt
-    rp = urllib.robotparser.RobotFileParser()
-    rp.set_url(urljoin(url, '/robots.txt'))
-    rp.read()
+    #rp = urllib.robotparser.RobotFileParser()
+    #rp.set_url(urljoin(url, '/robots.txt'))
+    #rp.read()
 
     # Check every link in the website
     for link in soup.find_all('a'):
         href = link.get('href')
         if href:
             full_url = get_full_url(url, href)
-            if full_url not in unique_links and rp.can_fetch('*', full_url):    # If the link has not been scanned, and we are allowed to scan
-                unique_links[full_url] = current_depth + 1
+            if full_url not in unique_links: #and rp.can_fetch('*', full_url):    # If the link has not been scanned, and we are allowed to scan
+                unique_links[full_url] = 1#current_depth + 1
                 links.add(full_url)
 
     return list(links)
@@ -202,7 +206,6 @@ def is_valid(url):
 def has_low_information(soup):
     text = soup.get_text(separator=' ')
     min_length = 200  # minimum number of characters
-
     return len(text) < min_length
 
 def get_content_hash(content):
