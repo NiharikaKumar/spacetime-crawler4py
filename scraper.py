@@ -35,7 +35,8 @@ for url in config.seed_urls:
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
-    return [link for link in links if is_valid(link)]
+    return links
+    # return [link for link in links if is_valid(link)]
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -91,9 +92,9 @@ def extract_next_links(url, resp):
         return set()
 
     # Check if the current depth is not too deep (Avoid traps)
-    #current_depth = unique_links[url]
-    #if(current_depth >= 200):
-    #    return set()
+    current_depth = unique_links[url]
+    if(current_depth >= 500):
+       return set()
 
     soup = BeautifulSoup(content, 'lxml')
 
@@ -104,6 +105,9 @@ def extract_next_links(url, resp):
 
     # Check if the website has little information
     if has_low_information(soup):
+        return set()
+    
+    if not is_valid(url):
         return set()
 
     # [] WRITE url with max words
@@ -118,7 +122,7 @@ def extract_next_links(url, resp):
 
     # [] WRITE most common words
     words_set = set(words) - set(stopwords)
-    filtered_words = [word for word in words_set if len(word) > 1]
+    filtered_words = [word for word in words_set if len(word) > 2 and word.isalpha()]
     word_counts.update(filtered_words)
     top_words = word_counts.most_common(50)
     with open("x_most_frequent.txt", 'w') as file:
@@ -157,7 +161,7 @@ def extract_next_links(url, resp):
         if href:
             full_url = get_full_url(url, href)
             if full_url not in unique_links: #and rp.can_fetch('*', full_url):    # If the link has not been scanned, and we are allowed to scan
-                unique_links[full_url] = 1#current_depth + 1
+                unique_links[full_url] = current_depth + 1
                 links.add(full_url)
 
     return list(links)

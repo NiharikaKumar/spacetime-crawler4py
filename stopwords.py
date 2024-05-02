@@ -35,4 +35,8 @@ stopwords = ['a', "a's", 'able', 'about', 'above', 'according', 'accordingly', '
 'whatever', 'whats', 'when', "when's", 'whence', 'whenever', 'where', "where's", 'whereafter', 'whereas', 'whereby', 'wherein', 'wheres', 'whereupon', 'wherever', 
 'whether', 'which', 'while', 'whim', 'whither', 'who', "who'll", "who's", 'whod', 'whoever', 'whole', 'whom', 'whomever', 'whos', 'whose', 'why', "why's", 'widely', 
 'will', 'willing', 'wish', 'with', 'within', 'without', "won't", 'wonder', 'wont', 'words', 'world', 'would', "wouldn't", 'wouldnt', 'www', 'x', 'y', 'yes', 'yet', 
-'you', "you'd", "you'll", "you're", "you've", 'youd', 'your', 'youre', 'yours', 'yourself', 'yourselves', 'z', 'zero']
+'you', "you'd", "you'll", "you're", "you've", 'youd', 'your', 'youre', 'yours', 'yourself', 'yourselves', 'z', 'zero', 'image', 
+'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
+'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec', 
+"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
+'prev', 'technical', 'size', 'image', 'ori']
